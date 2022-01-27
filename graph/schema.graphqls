@@ -1,0 +1,54 @@
+scalar Time
+
+type AuthToken {
+  accessToken: String!
+}
+
+type AuthResponse {
+  authToken: AuthToken!
+  user: User!
+}
+
+type User {
+  id: ID!
+  username: String!
+  password: String!
+}
+
+type Message {
+  id: ID!
+  user_id: Int!
+  content: String!
+  user: User!
+}
+
+type Query {
+  user(id: ID!): User! 
+  messages: [Message!]!
+}
+
+input LoginInput {
+  username: String!
+  password: String!
+}
+
+input NewMessageInput {
+  user_id: ID!
+  content: String!
+}
+
+input RegisterInput {
+  username: String!
+  password: String!
+  confirmPassword: String!
+}
+
+type Mutation {
+  newMessage(input: NewMessageInput!): Message!
+  createUser(input: RegisterInput!): AuthResponse!
+  login(input: LoginInput!): AuthResponse!
+}
+
+type Subscription {
+  messages: [Message]
+}
