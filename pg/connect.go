@@ -21,7 +21,7 @@ func Connect() *sql.DB {
 
 	db, err := sql.Open("postgres", pg_con_string)
 	if err != nil {
-		fmt.Printf("Error conecting to the DB", err)
+		fmt.Println("Error conecting to the DB", err)
 	}
 	return db
 }
