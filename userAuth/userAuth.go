@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-var userCtxKey = &contextKey{"user"}
+var UserCtxKey = &contextKey{"user"}
 
 type contextKey struct {
 	name string
@@ -45,7 +45,7 @@ func Middleware() func(http.Handler) http.Handler {
 			}
 			user.ID = id
 			// put it in context
-			ctx := context.WithValue(r.Context(), userCtxKey, &user)
+			ctx := context.WithValue(r.Context(), UserCtxKey, &user)
 
 			// and call the next with our new context
 			r = r.WithContext(ctx)
@@ -56,6 +56,6 @@ func Middleware() func(http.Handler) http.Handler {
 
 // ForContext finds the user from the context. REQUIRES Middleware to have run.
 func ForContext(ctx context.Context) *pg.User {
-	raw, _ := ctx.Value(userCtxKey).(*pg.User)
+	raw, _ := ctx.Value(UserCtxKey).(*pg.User)
 	return raw
 }

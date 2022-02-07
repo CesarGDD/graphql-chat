@@ -10,20 +10,20 @@ type AuthResponse {
 }
 
 type User {
-  id: ID!
+  id: Int!
   username: String!
   password: String!
 }
 
 type Message {
-  id: ID!
+  id: Int!
   user_id: Int!
   content: String!
   user: User!
 }
 
 type Query {
-  user(id: ID!): User! 
+  user(id: Int!): User! 
   messages: [Message!]!
 }
 
@@ -33,7 +33,7 @@ input LoginInput {
 }
 
 input NewMessageInput {
-  user_id: ID!
+  user_id: Int!
   content: String!
 }
 

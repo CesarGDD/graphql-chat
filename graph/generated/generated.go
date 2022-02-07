@@ -36,6 +36,7 @@ type Config struct {
 }
 
 type ResolverRoot interface {
+	Message() MessageResolver
 	Mutation() MutationResolver
 	Query() QueryResolver
 	Subscription() SubscriptionResolver
@@ -69,7 +70,7 @@ type ComplexityRoot struct {
 
 	Query struct {
 		Messages func(childComplexity int) int
-		User     func(childComplexity int, id string) int
+		User     func(childComplexity int, id int) int
 	}
 
 	Subscription struct {
@@ -83,13 +84,16 @@ type ComplexityRoot struct {
 	}
 }
 
+type MessageResolver interface {
+	User(ctx context.Context, obj *pg.Message) (*pg.User, error)
+}
 type MutationResolver interface {
 	NewMessage(ctx context.Context, input pg.NewMessageInput) (*pg.Message, error)
 	CreateUser(ctx context.Context, input pg.RegisterInput) (*pg.AuthResponse, error)
 	Login(ctx context.Context, input pg.LoginInput) (*pg.AuthResponse, error)
 }
 type QueryResolver interface {
-	User(ctx context.Context, id string) (*pg.User, error)
+	User(ctx context.Context, id int) (*pg.User, error)
 	Messages(ctx context.Context) ([]pg.Message, error)
 }
 type SubscriptionResolver interface {
@@ -213,7 +217,7 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Query.User(childComplexity, args["id"].(string)), true
+		return e.complexity.Query.User(childComplexity, args["id"].(int)), true
 
 	case "Subscription.messages":
 		if e.complexity.Subscription.Messages == nil {
@@ -336,20 +340,20 @@ type AuthResponse {
 }
 
 type User {
-  id: ID!
+  id: Int!
   username: String!
   password: String!
 }
 
 type Message {
-  id: ID!
+  id: Int!
   user_id: Int!
   content: String!
   user: User!
 }
 
 type Query {
-  user(id: ID!): User! 
+  user(id: Int!): User! 
   messages: [Message!]!
 }
 
@@ -359,7 +363,7 @@ input LoginInput {
 }
 
 input NewMessageInput {
-  user_id: ID!
+  user_id: Int!
   content: String!
 }
 
@@ -449,10 +453,10 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 func (ec *executionContext) field_Query_user_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
-	var arg0 string
+	var arg0 int
 	if tmp, ok := rawArgs["id"]; ok {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
-		arg0, err = ec.unmarshalNID2string(ctx, tmp)
+		arg0, err = ec.unmarshalNInt2int(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
@@ -634,9 +638,9 @@ func (ec *executionContext) _Message_id(ctx context.Context, field graphql.Colle
 		}
 		return graphql.Null
 	}
-	res := resTmp.(string)
+	res := resTmp.(int)
 	fc.Result = res
-	return ec.marshalNID2string(ctx, field.Selections, res)
+	return ec.marshalNInt2int(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Message_user_id(ctx context.Context, field graphql.CollectedField, obj *pg.Message) (ret graphql.Marshaler) {
@@ -720,14 +724,14 @@ func (ec *executionContext) _Message_user(ctx context.Context, field graphql.Col
 		Object:     "Message",
 		Field:      field,
 		Args:       nil,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 	}
 
 	ctx = graphql.WithFieldContext(ctx, fc)
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.User, nil
+		return ec.resolvers.Message().User(rctx, obj)
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -895,7 +899,7 @@ func (ec *executionContext) _Query_user(ctx context.Context, field graphql.Colle
 	fc.Args = args
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().User(rctx, args["id"].(string))
+		return ec.resolvers.Query().User(rctx, args["id"].(int))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1090,9 +1094,9 @@ func (ec *executionContext) _User_id(ctx context.Context, field graphql.Collecte
 		}
 		return graphql.Null
 	}
-	res := resTmp.(string)
+	res := resTmp.(int)
 	fc.Result = res
-	return ec.marshalNID2string(ctx, field.Selections, res)
+	return ec.marshalNInt2int(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _User_username(ctx context.Context, field graphql.CollectedField, obj *pg.User) (ret graphql.Marshaler) {
@@ -2331,7 +2335,7 @@ func (ec *executionContext) unmarshalInputNewMessageInput(ctx context.Context, o
 			var err error
 
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("user_id"))
-			it.UserID, err = ec.unmarshalNID2string(ctx, v)
+			it.UserID, err = ec.unmarshalNInt2int(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -2486,7 +2490,7 @@ func (ec *executionContext) _Message(ctx context.Context, sel ast.SelectionSet, 
 			out.Values[i] = innerFunc(ctx)
 
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
 			}
 		case "user_id":
 			innerFunc := func(ctx context.Context) (res graphql.Marshaler) {
@@ -2496,7 +2500,7 @@ func (ec *executionContext) _Message(ctx context.Context, sel ast.SelectionSet, 
 			out.Values[i] = innerFunc(ctx)
 
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
 			}
 		case "content":
 			innerFunc := func(ctx context.Context) (res graphql.Marshaler) {
@@ -2506,18 +2510,28 @@ func (ec *executionContext) _Message(ctx context.Context, sel ast.SelectionSet, 
 			out.Values[i] = innerFunc(ctx)
 
 			if out.Values[i] == graphql.Null {
-				invalids++
+				atomic.AddUint32(&invalids, 1)
 			}
 		case "user":
+			field := field
+
 			innerFunc := func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Message_user(ctx, field, obj)
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Message_user(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&invalids, 1)
+				}
+				return res
 			}
 
-			out.Values[i] = innerFunc(ctx)
+			out.Concurrently(i, func() graphql.Marshaler {
+				return innerFunc(ctx)
 
-			if out.Values[i] == graphql.Null {
-				invalids++
-			}
+			})
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -3190,21 +3204,6 @@ func (ec *executionContext) unmarshalNBoolean2bool(ctx context.Context, v interf
 
 func (ec *executionContext) marshalNBoolean2bool(ctx context.Context, sel ast.SelectionSet, v bool) graphql.Marshaler {
 	res := graphql.MarshalBoolean(v)
-	if res == graphql.Null {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			ec.Errorf(ctx, "must not be null")
-		}
-	}
-	return res
-}
-
-func (ec *executionContext) unmarshalNID2string(ctx context.Context, v interface{}) (string, error) {
-	res, err := graphql.UnmarshalID(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
-	res := graphql.MarshalID(v)
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "must not be null")

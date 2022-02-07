@@ -11,17 +11,44 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
+	"math/rand"
 )
+
+var chatMsg []*pg.Message
+var chat map[string]chan []*pg.Message
+
+func init() {
+	chat = map[string]chan []*pg.Message{}
+}
+
+var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func randString(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
+}
+
+func (r *messageResolver) User(ctx context.Context, obj *pg.Message) (*pg.User, error) {
+	res, err := db.GetUserById(context.Background(), int32(obj.UserID))
+	if err != nil {
+		fmt.Println("Error getting user", err)
+	}
+	return &pg.User{
+		ID:       res.ID,
+		Username: res.Username,
+	}, nil
+}
 
 func (r *mutationResolver) NewMessage(ctx context.Context, input pg.NewMessageInput) (*pg.Message, error) {
 	user := userAuth.ForContext(ctx)
 	if user == nil {
 		return nil, fmt.Errorf("access denied")
 	}
-	id, _ := strconv.Atoi(input.UserID)
-	res, err := db.CreateMessage(ctx, pg.CreateMessageParams{
-		UserID:  int32(id),
+	res, err := db.CreateMessage(context.Background(), pg.CreateMessageParams{
+		UserID:  int32(input.UserID),
 		Content: input.Content,
 	})
 	if err != nil {
@@ -45,10 +72,13 @@ func (r *mutationResolver) CreateUser(ctx context.Context, input pg.RegisterInpu
 	if err != nil {
 		fmt.Println(err)
 	}
-	res, err := db.CreateUser(ctx, pg.CreateUserParams{
+	res, err := db.CreateUser(context.Background(), pg.CreateUserParams{
 		Username: input.Username,
 		Password: hashedPassword,
 	})
+	if err != nil {
+		fmt.Println(err)
+	}
 	token, err := jwt.GenerateToken(res.Username)
 	if err != nil {
 		fmt.Println(err)
@@ -66,7 +96,7 @@ func (r *mutationResolver) CreateUser(ctx context.Context, input pg.RegisterInpu
 }
 
 func (r *mutationResolver) Login(ctx context.Context, input pg.LoginInput) (*pg.AuthResponse, error) {
-	res, err := db.GetIdUserByUsername(ctx, input.Username)
+	res, err := db.GetIdUserByUsername(context.Background(), input.Username)
 	if err != nil {
 		return nil, errors.New("invalid username")
 	}
@@ -88,9 +118,9 @@ func (r *mutationResolver) Login(ctx context.Context, input pg.LoginInput) (*pg.
 	}, nil
 }
 
-func (r *queryResolver) User(ctx context.Context, id string) (*pg.User, error) {
-	inputId, err := strconv.Atoi(id)
-	res, err := db.GetUserById(ctx, int32(inputId))
+func (r *queryResolver) User(ctx context.Context, id int) (*pg.User, error) {
+	// inputId, err := strconv.Atoi(id)
+	res, err := db.GetUserById(context.Background(), int32(id))
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -105,7 +135,7 @@ func (r *queryResolver) Messages(ctx context.Context) ([]pg.Message, error) {
 	if user == nil {
 		return nil, fmt.Errorf("access denied")
 	}
-	res, err := db.ListMessages(ctx)
+	res, err := db.ListMessages(context.Background())
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -113,15 +143,16 @@ func (r *queryResolver) Messages(ctx context.Context) ([]pg.Message, error) {
 }
 
 func (r *subscriptionResolver) Messages(ctx context.Context) (<-chan []*pg.Message, error) {
+	id := randString(8)
+	events := make(chan []*pg.Message, 1)
 	user := userAuth.ForContext(ctx)
 	if user == nil {
 		return nil, fmt.Errorf("access denied")
 	}
-	id := randString(8)
-	events := make(chan []*pg.Message, 1)
+	fmt.Println("==========================================================================================================================", user)
 
 	go func() {
-		<-ctx.Done()
+		<-context.Background().Done()
 		delete(chat, id)
 	}()
 
@@ -129,6 +160,9 @@ func (r *subscriptionResolver) Messages(ctx context.Context) (<-chan []*pg.Messa
 
 	return events, nil
 }
+
+// Message returns generated.MessageResolver implementation.
+func (r *Resolver) Message() generated.MessageResolver { return &messageResolver{r} }
 
 // Mutation returns generated.MutationResolver implementation.
 func (r *Resolver) Mutation() generated.MutationResolver { return &mutationResolver{r} }
@@ -139,6 +173,14 @@ func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 // Subscription returns generated.SubscriptionResolver implementation.
 func (r *Resolver) Subscription() generated.SubscriptionResolver { return &subscriptionResolver{r} }
 
+type messageResolver struct{ *Resolver }
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }
+
+// !!! WARNING !!!
+// The code below was going to be deleted when updating resolvers. It has been copied here so you have
+// one last chance to move it out of harms way if you want. There are two reasons this happens:
+//  - When renaming or deleting a resolver the old code will be put in here. You can safely delete
+//    it when you're done.
+//  - You have helper methods in this file. Move them out to keep these resolver files clean.

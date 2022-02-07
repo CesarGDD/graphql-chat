@@ -3,6 +3,7 @@ package main
 import (
 	"cesargdd/graph-subcriptions/graph"
 	"cesargdd/graph-subcriptions/graph/generated"
+	"cesargdd/graph-subcriptions/jwt"
 	"cesargdd/graph-subcriptions/pg"
 	"cesargdd/graph-subcriptions/userAuth"
 	"context"
@@ -10,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/99designs/gqlgen/graphql/handler"
@@ -24,16 +24,10 @@ import (
 
 const defaultPort = "8080"
 
-var userCtxKey = &contextKey{"user"}
-
-type contextKey struct {
-	name string
-}
-
-var conn = pg.Connect()
-var db = pg.New(conn)
-
 func main() {
+
+	var conn = pg.Connect()
+	var db = pg.New(conn)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -43,48 +37,43 @@ func main() {
 	router := chi.NewRouter()
 
 	router.Use(cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:8080"},
+		AllowedOrigins:   []string{"*"},
 		AllowCredentials: true,
-		Debug:            true,
+		Debug:            false,
+		AllowedHeaders:   []string{"*"},
 	}).Handler)
 	router.Use(userAuth.Middleware())
 	// Use New instead of NewDefaultServer in order to have full control over defining transports
 	srv := handler.New(generated.NewExecutableSchema(generated.Config{Resolvers: &graph.Resolver{}}))
 	srv.AddTransport(transport.POST{})
 	srv.AddTransport(transport.Websocket{
-		KeepAlivePingInterval: 10 * time.Second,
 		Upgrader: websocket.Upgrader{
+			HandshakeTimeout: time.Minute,
 			CheckOrigin: func(r *http.Request) bool {
 				return true
 			},
 			EnableCompression: true,
 		},
+		KeepAlivePingInterval: 10 * time.Second,
 		InitFunc: func(ctx context.Context, initPayload transport.InitPayload) (context.Context, error) {
-			token := initPayload.Authorization()
-			user := userAuth.ForContext(ctx)
-			if user == nil {
-				return nil, fmt.Errorf("access denied")
+			payload := initPayload.Authorization()
+			if payload == "" {
+				fmt.Println("Noa acces graded")
 			}
-
-			Id, _ := strconv.Atoi(user.ID)
-			// get the user from the database
-			_, err := db.GetUserById(ctx, int32(Id))
+			username, err := jwt.ParseToken(payload)
 			if err != nil {
-				fmt.Println("error user db for websockets")
+				fmt.Println(err)
 			}
-
-			nctx, _ := context.WithCancel(ctx)
-
-			// put it in context
-			userCtx := context.WithValue(nctx, userCtxKey, &pg.AuthResponse{
-				AuthToken: &pg.AuthToken{
-					AccessToken: token,
-				},
-				User: user,
-			})
-
-			// and return it so the resolvers can see it
-			return userCtx, nil
+			fmt.Println(username)
+			user, err := db.GetIdUserByUsername(ctx, username)
+			if err != nil {
+				fmt.Println(err)
+			}
+			fmt.Println(user)
+			cont := context.TODO()
+			usrCtx := context.WithValue(cont, userAuth.UserCtxKey, &user)
+			// log.Println(usrCtx.Value(userAuth.UserCtxKey))
+			return usrCtx, nil
 		},
 	})
 	srv.Use(extension.Introspection{})

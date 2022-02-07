@@ -2,7 +2,6 @@ package graph
 
 import (
 	"cesargdd/graph-subcriptions/pg"
-	"math/rand"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -14,20 +13,9 @@ import (
 type Resolver struct {
 }
 
-var chatMsg []*pg.Message
-var chat map[string]chan []*pg.Message
-
 var conn = pg.Connect()
 var db = pg.New(conn)
-var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
-func randString(n int) string {
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
-	}
-	return string(b)
-}
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
 	return string(bytes), err

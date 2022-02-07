@@ -19,14 +19,14 @@ type LoginInput struct {
 }
 
 type Message struct {
-	ID      string `json:"id"`
+	ID      int `json:"id"`
 	UserID  int    `json:"user_id"`
 	Content string `json:"content"`
 	User    *User  `json:"user"`
 }
 
 type NewMessageInput struct {
-	UserID  string `json:"user_id"`
+	UserID  int `json:"user_id"`
 	Content string `json:"content"`
 }
 
@@ -37,7 +37,7 @@ type RegisterInput struct {
 }
 
 type User struct {
-	ID       string `json:"id"`
+	ID       int `json:"id"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
